@@ -1,1 +1,1 @@
-{"version":"v1.0.0","iteration":2,"publish":false}
+{"version":"v1.0.0","iteration":3,"publish":true,"approved_package_sha256":"99c5c9f064f6a635ea32afb8b53d7ca92c5cf69b53594303b97b7768a65cb131","checks":"153 tests on Windows and Linux; Chromium workflow; package inspection; upgrade, rollback and reapply preserve data"}
