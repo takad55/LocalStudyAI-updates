@@ -1,0 +1,111 @@
+name: Verify and release LocalStudy AI v1.1
+on:
+  push:
+    branches: [build-v11-20261109]
+    paths: [release_v11/READY.json]
+permissions:
+  contents: read
+env:
+  PYTHONUTF8: '1'
+  PYTHONIOENCODING: utf-8
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build pinned base and hash-checked source
+        run: python release_v11/build.py
+      - name: Install unchanged runtime dependencies
+        run: python -m pip install -r build/app/requirements.txt
+      - name: Unit, regression and integration tests
+        working-directory: build/app
+        run: python -m unittest discover -s tests -v
+      - name: Real package upgrade and rollback
+        run: python release_v11/migration_check.py
+      - name: JavaScript syntax
+        shell: bash
+        run: |
+          node --check build/app/localstudy/webui/app.js
+          node --check build/app/localstudy/webui/workbench.js
+      - name: Quality and memory before-after comparison
+        run: python release_v11/compare.py
+      - name: Install browser test tools only in CI
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium
+          sudo apt-get install -y fonts-noto-cjk
+      - name: Browser workflow and compact layout
+        if: matrix.os == 'ubuntu-latest'
+        run: python release_v11/browser_check.py
+      - name: Save verified Linux package and reports
+        if: success() && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-v11-package
+          path: |
+            build/LocalStudyAI_v1.1.0.lsai
+            build/build_report.json
+            build/comparison.json
+            build/browser_report.json
+            build/*.png
+            build/NOTES.md
+            build/changes.patch
+          if-no-files-found: error
+      - name: Save Windows comparison report
+        if: success() && matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-v11-report
+          path: |
+            build/build_report.json
+            build/comparison.json
+          if-no-files-found: error
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read explicit publication gate
+        id: gate
+        run: |
+          python - <<'PY'
+          import json, os
+          ready=json.load(open('release_v11/READY.json'))
+          assert ready['version']=='v1.1.0'
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('publish='+str(ready.get('publish') is True).lower()+'\n')
+          PY
+      - uses: actions/download-artifact@v4
+        if: steps.gate.outputs.publish == 'true'
+        with:
+          name: verified-v11-package
+          path: dist
+      - name: Verify tested package and publish without replacing existing releases
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,pathlib
+          p=pathlib.Path('dist/LocalStudyAI_v1.1.0.lsai')
+          r=json.load(open('dist/build_report.json'))
+          assert hashlib.sha256(p.read_bytes()).hexdigest()==r['sha256']
+          PY
+          if gh release view v1.1.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'v1.1.0 exists; refusing overwrite'
+            exit 1
+          fi
+          gh release create v1.1.0 dist/LocalStudyAI_v1.1.0.lsai dist/changes.patch dist/comparison.json --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'LocalStudy AI v1.1.0' --notes-file dist/NOTES.md
