@@ -1,1 +1,1 @@
-{"version":"v1.1.0","publish":false,"iteration":1,"scope":"existing organization, search and memory efficiency only"}
+{"version":"v1.1.0","publish":true,"iteration":2,"scope":"existing organization, search and memory efficiency only","review":"Linux quality, memory, migration and browser passed; explicit test-connection cleanup fixed. Publication requires both platforms to pass again."}
