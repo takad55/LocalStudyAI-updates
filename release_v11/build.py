@@ -67,6 +67,15 @@ def make():
     patch = (ROOT / 'changes.patch').relative_to(ROOT.parent).as_posix()
     subprocess.run(['git', 'apply', '--check', '--directory=build/app', patch], cwd=ROOT.parent, check=True)
     subprocess.run(['git', 'apply', '--directory=build/app', patch], cwd=ROOT.parent, check=True)
+    # SQLite's transaction context does not close its connection. Close the two
+    # inspection-only test connections explicitly before Windows fixture cleanup.
+    tests = app / 'tests/test_lightweight.py'
+    test_text = tests.read_text('utf-8')
+    old = 'with sqlite3.connect(self.db) as db:'
+    assert test_text.count(old) == 2, 'Unexpected cache test structure'
+    test_text = test_text.replace('import http.client\n', 'import http.client\nfrom contextlib import closing\n', 1)
+    test_text = test_text.replace(old, 'with closing(sqlite3.connect(self.db)) as db, db:')
+    tests.write_text(test_text, encoding='utf-8', newline='\n')
     assert (app / 'VERSION.txt').read_text('utf-8').strip() == VERSION
     assert (app / 'requirements.txt').read_bytes() == (baseline / 'requirements.txt').read_bytes(), 'Runtime dependencies changed'
     files = {}
