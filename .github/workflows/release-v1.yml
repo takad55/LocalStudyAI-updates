@@ -1,0 +1,54 @@
+name: Build and verify LocalStudy AI v1
+on:
+  push:
+    branches: [build-v1-20261109]
+    paths: [release/READY.json]
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reconstruct release from pinned base and reviewed files
+        run: python release/build.py
+      - name: Install pinned dependencies
+        run: python -m pip install -r build/app/requirements.txt
+      - name: Unit and integration tests
+        run: python -m unittest discover -s tests -v
+        working-directory: build/app
+      - name: Save verified package
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-v1-package
+          path: build/LocalStudyAI_v1.0.0.lsai
+          if-no-files-found: error
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-v1-package
+          path: dist
+      - name: Publish only after both operating systems pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view v1.0.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && { echo 'v1.0.0 already exists; refusing to overwrite'; exit 1; }
+          gh release create v1.0.0 dist/LocalStudyAI_v1.0.0.lsai --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'LocalStudy AI v1.0.0' --notes-file release/NOTES.md
