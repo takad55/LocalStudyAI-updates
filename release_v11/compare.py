@@ -19,7 +19,7 @@ assert q1['classification_wrong_assignment'] <= q0['classification_wrong_assignm
 assert q1['search_top1_correct'] > q0['search_top1_correct'], 'Retrieval did not improve'
 assert results['reading']['after']['python_peak_bytes'] < results['reading']['before']['python_peak_bytes'] / 2, 'Bounded-read peak allocation regression'
 assert results['analysis']['after']['extraction_calls'] < results['analysis']['before']['extraction_calls'], 'No cache improvement'
-assert results['analysis']['after']['repeat']['parsed'] == 0, 'Unchanged repeated analysis reparsed documents'
+assert results['analysis']['after']['repeat']['excerpt_parsed'] == 0, 'Unchanged repeated analysis reparsed documents'
 report = {'environment': sys.platform, 'scope': 'Generated known-answer fixtures; no real Ollama. Timings include tracemalloc; processes are separate.', 'results': results, 'gates': 'passed'}
 (OUT / 'comparison.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
 print('Before/after comparison gates: PASS')
